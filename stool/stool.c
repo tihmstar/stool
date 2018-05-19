@@ -33,11 +33,13 @@ typedef struct{
     char section1encSHA256[0x20];
     char section2encSHA256[0x20];
     char section3encSHA256[0x20];
-} Pachage2Header_t;
+} Package2Header_t;
+
+CASSERT(sizeof(Package2Header_t) == 0x100, Package2Header_t_bad_header_size);
 
 typedef struct{
     char signature[0x100];
-    Pachage2Header_t header;
+    Package2Header_t header;
     char body[];
 } Package2_t;
 
@@ -48,7 +50,7 @@ void printHex(const char *str, size_t size){
 int package2List(const char *buf, size_t bufSize){
     int err = 0;
     Package2_t *pkg2 = NULL;
-
+    
     assure(bufSize >= sizeof(Package2_t));
     pkg2 = (Package2_t*)buf;
     

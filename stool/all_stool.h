@@ -24,5 +24,12 @@
 #define assure(a) do{ if ((a) == 0){err=-(__LINE__); goto error;} }while(0)
 #define reterror(estr ...) do{error(estr);err=-(__LINE__); goto error; }while(0)
 
+//statis assert
+#define CASSERT(predicate, file) _impl_CASSERT_LINE(predicate,__LINE__,file)
+
+#define _impl_PASTE(a,b) a##b
+#define _impl_CASSERT_LINE(predicate, line, file) \
+typedef char _impl_PASTE(assertion_failed_##file##_,line)[2*!!(predicate)-1];
+
 
 #endif /* all_stool_h */
