@@ -63,7 +63,7 @@ void cmd_help(){
     printf("  -h, --help\t\t\tprints usage information\n");
     printf("  -l, --list\t\t\tlist sections (needs type)\n");
     printf("  -1, --package1\t\tmark file as PACKAGE1 file\n");
-    printf("  -2, --package2\t\tmark file as PACKAGE1 file\n");
+    printf("  -2, --package2\t\tmark file as PACKAGE2 file\n");
     printf("  -s, --section SECTION\t\tselect section\n");
     printf("  -e, --extract DSTPATH\t\textract to file\n");
 
