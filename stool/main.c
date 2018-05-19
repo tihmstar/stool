@@ -126,6 +126,8 @@ int main(int argc, const char * argv[]) {
         fileName = argv[0];
     }else{
         cmd_help();
+        if (argc == 1)//clean termination
+            goto error; //don't print any errors if called without args
         reterror("Unexpected end of arguments");
     }
     
