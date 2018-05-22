@@ -51,6 +51,7 @@ static struct option longopts[] = {
     { "list",           no_argument,        NULL, 'l' },
     { "package1",       no_argument,        NULL, '1' },
     { "package2",       no_argument,        NULL, '2' },
+    { "bct",            no_argument,        NULL, '0' },
     { "section",        required_argument,  NULL, 's' },
     { "extract",        required_argument,  NULL, 'e' },
     { NULL, 0, NULL, 0 }
@@ -64,6 +65,7 @@ void cmd_help(){
     printf("  -l, --list\t\t\tlist sections (needs type)\n");
     printf("  -1, --package1\t\tmark file as PACKAGE1 file\n");
     printf("  -2, --package2\t\tmark file as PACKAGE2 file\n");
+    printf("      --bct\t\tmark file as BCT file\n");
     printf("  -s, --section SECTION\t\tselect section\n");
     printf("  -e, --extract DSTPATH\t\textract to file\n");
 
@@ -73,7 +75,8 @@ void cmd_help(){
 enum filetype{
     kFileTypeUndefined  = 0,
     kFileTypePackage1   = 1,
-    kFileTypePackage2   = 2
+    kFileTypePackage2   = 2,
+    kFileTypeBCT
 };
 
 #define FLAG_LIST_SECTIONS    1 << 0
@@ -82,7 +85,7 @@ int main(int argc, const char * argv[]) {
     printf("Version: " STOOL_VERSION_COMMIT_SHA " - " STOOL_VERSION_COMMIT_COUNT "\n");
     int err = 0;
     int optindex = 0;
-    int opt = 0;
+    char opt = 0;
     
     long flags = 0;
     enum filetype fileType = kFileTypeUndefined;
@@ -94,7 +97,7 @@ int main(int argc, const char * argv[]) {
     size_t fileBufSize = 0;
     char *fileBuf = NULL;
     
-    while ((opt = getopt_long(argc, (char* const *)argv, "hl12s:e:", longopts, &optindex)) > 0) {
+    while ((opt = getopt_long(argc, (char* const *)argv, "hl12s:e:0", longopts, &optindex)) > 0) {
         switch (opt) {
             case 'l':
                 flags |= FLAG_LIST_SECTIONS;
@@ -110,6 +113,21 @@ int main(int argc, const char * argv[]) {
                 break;
             case 'e':
                 extractFileName = optarg;
+                break;
+            
+            case '0':
+            {
+                switch (optindex) {
+                    case 4://bct
+                        assure(fileType == kFileTypeUndefined);
+                        fileType = kFileTypeBCT;
+                        break;
+                        
+                    default:
+                        cmd_help();
+                        goto error;//clean termination
+                }
+            }
                 break;
                 
             default:
@@ -138,6 +156,10 @@ int main(int argc, const char * argv[]) {
         switch (fileType) {
             case kFileTypePackage2:
                 assure(!package2List(fileBuf,fileBufSize));
+                break;
+                
+            case kFileTypeBCT:
+                assure(!bctList(fileBuf,fileBufSize));
                 break;
                 
             default:
