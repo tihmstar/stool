@@ -208,7 +208,7 @@ int main(int argc, const char * argv[]) {
     if (flags & FLAG_LIST_SECTIONS) {
         switch (fileType) {
             case kFileTypePackage1:
-                retassure(baseAddr, "base address required for listing package1List");
+                retassure(baseAddr, "base address required for package1List");
                 assure(!package1List(fileBuf,fileBufSize, baseAddr));
                 break;
             case kFileTypePackage2:
@@ -229,6 +229,10 @@ int main(int argc, const char * argv[]) {
         //extract a section
         printf("Extracting section %d\n",section);
         switch (fileType) {
+            case kFileTypePackage1:
+                retassure(baseAddr, "base address required for package2GetSection");
+                assure(!package1GetSection(fileBuf, fileBufSize, baseAddr, section, &sBuf, &sBufSize));
+                break;
             case kFileTypePackage2:
                 assure(!package2GetSection(fileBuf, fileBufSize, section, &sBuf, &sBufSize));
                 break;
@@ -241,6 +245,8 @@ int main(int argc, const char * argv[]) {
         assure(!writeToFile(extractFileName, sBuf, sBufSize));
         printf("Wrote section to %s\n",extractFileName);
         
+    }else{
+        reterror("no operation selected");
     }
     
     

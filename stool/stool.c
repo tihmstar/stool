@@ -390,6 +390,55 @@ error:
 }
 
 #pragma mark extract
+int package1GetSection(const char *buf, size_t bufSize, uint32_t base, int selectedSection, const char **section, size_t *sectionSize){
+    int err = 0;
+    Package1Header_t *pkg1 = NULL;
+    PK11Header_t *pk11hdr = NULL;
+    size_t pk11BufSize = 0;
+    void *outPtr = NULL;
+    size_t outSize = 0;
+    
+    assure(bufSize > sizeof(Package1Header_t));
+    pkg1 = (Package1Header_t*)buf;
+    
+#warning TODO: make this actually check/parse header
+    for (int i=0; i<sizeof(pkg1->versionID); i++) {
+        assure(pkg1->versionID[i]>='0' && pkg1->versionID[i] <= '9');
+    }
+    
+    pk11hdr = getPK11Header(buf, bufSize, base);
+    pk11BufSize = bufSize-((char*)pk11hdr-buf);
+    
+    assure(pk11BufSize >= sizeof(PK11Header_t));
+    retassure(pk11hdr->magic == *(uint32_t*)"PK11","wrong header magic. Is this file encrypted?");
+
+    outPtr  = (pk11hdr+1);
+    outSize = pk11hdr->section0Size;
+    switch (selectedSection) {
+        case 2:
+            outPtr  += pk11hdr->section1Size;
+            outSize += pk11hdr->section2Size;
+            //intentionally no break
+        case 1:
+            outPtr  += pk11hdr->section0Size;
+            outSize += pk11hdr->section1Size;
+            //intentionally no break
+        case 0:
+            //parameters for extracting section 0 already set correctly
+            break;
+        default:
+            reterror("Unknown section %d",selectedSection);
+            break;
+    }
+    //check bufsize before commiting results
+    assure((char*)outPtr-buf+outSize <= bufSize);
+    *section = outPtr;
+    *sectionSize = outSize;
+    
+error:
+    return err;
+}
+
 int package2GetSection(const char *buf, size_t bufSize, int selectedSection, const char **section, size_t *sectionSize){
     int err = 0;
     
