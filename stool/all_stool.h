@@ -22,6 +22,7 @@
 
 #define safeFree(buf) ({if (buf) free(buf), buf = NULL;})
 #define assure(a) do{ if ((a) == 0){err=-(__LINE__); goto error;} }while(0)
+#define retassure(a, errStr ...) do{ if ((a) == 0){err=-(__LINE__); error(errStr); goto error;} }while(0)
 #define reterror(estr ...) do{error(estr);err=-(__LINE__); goto error; }while(0)
 
 //statis assert

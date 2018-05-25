@@ -9,6 +9,7 @@
 #include "all_stool.h"
 #include "stool.h"
 #include <string.h>
+#include "patchfinder32.h"
 
 #define STATIC_INLINE static inline
 #define ATTRIBUTE_PACKED __attribute__ ((packed))
@@ -17,6 +18,24 @@
 #define unusualPrintBuf(field,expected,print) if (memcmp(field,expected,sizeof(expected)-1)) {printf("[Unusual] %s : ",print); printHex(field,sizeof(expected)-1);printf("\n");}
 #define unusualEmptyPrintBuf(field,emptySize,print)\
 do { for (int i=0; i<emptySize; i++){ if (field[i]){printf("[Unusual] %s : ",print); printHex(field,emptySize);printf("\n");break;} }} while (0)
+
+typedef struct{
+    char unknown[0x10]; //TODO what are these headers?
+    char versionID[14];
+    uint16_t unknown2;
+} ATTRIBUTE_PACKED Package1Header_t;
+
+
+typedef struct{
+    uint32_t magic;
+    uint32_t section0Size;
+    uint32_t section0Offset;
+    uint32_t _unknown;
+    uint32_t section1Size;
+    uint32_t section1Offset;
+    uint32_t section2Size;
+    uint32_t section2Offset;
+} ATTRIBUTE_PACKED PK11Header_t;
 
 
 typedef struct{
@@ -140,7 +159,125 @@ void printHex(const char *str, size_t size){
     }
 }
 
+void *getPK11Header(const char *buf, ssize_t bufSize, uint32_t base){
+#define stepInsn(bytes) ({assure((bufSize-=bytes) > 0); insn+=bytes;})
+    int err = 0;
+    void *res = NULL;
+    uint8_t *bufstart = (uint8_t*)buf;
+    uint8_t *insn = (uint8_t*)buf;
+    
+    int32_t tmpnum = 0;
+
+    assure((bufSize-=4) > 0);
+    
+    //too lazy to parse ARM asm
+    tmpnum = *(uint32_t*)(bufstart+0x38); //hardcoded for now
+    
+    assure(tmpnum >> 16 == base >> 16); //check if it's kinda the right range
+    assure(tmpnum-base < bufSize); //check if we're pointing inside our buffer
+    printf("func base              0x%08x\n",base);
+
+    assure(tmpnum & 1); //make sure the code switches to Thumb mode
+    tmpnum &= ~1; //don't get misaligned by ARM->Thumb switch
+    printf("func main              0x%08x\n",tmpnum);
+
+    tmpnum -=base; //main offset
+    stepInsn(tmpnum);
+    
+    //insn is pointing to main now
+    assure(insn_is_push((uint16_t*)insn));
+    
+    //find end of main
+    while (!insn_is_pop((uint16_t*)insn))
+        stepInsn(2);
+    
+    //last function of main is exec_nx_boot_stub.
+    //second to last function is decrypt_pk11_blob. We want to go there!
+    //find exec_nx_boot_stub
+    do{
+        stepInsn(-2);
+    }while (!insn_is_bl((uint16_t*)insn));
+
+    
+    //now find decrypt_pk11_blob
+    do{
+        stepInsn(-2);
+    }while (!insn_is_bl((uint16_t*)insn));
+    
+    //find arg0 to the func
+    stepInsn(-2);
+    assure(insn_is_ldr_literal((uint16_t*)insn));
+    assure(insn_ldr_literal_rt((uint16_t*)insn) == 0); //check for r0
+    
+    tmpnum = insn_ldr_literal_imm((uint16_t*)insn)*4;
+    stepInsn(2);
+    
+    if ((int32_t)(insn-bufstart + base) % 4 != 0) { //4 byte align
+        assure((int32_t)(insn-bufstart + base) % 4 == 2); //can only be off by 2 since we go 2-byte-steps
+        stepInsn(2);
+    }
+    stepInsn(tmpnum);
+    
+    tmpnum = *(int32_t*)insn; //get absolute addr
+    
+    assure(tmpnum >> 16 == base >> 16); //check if it's kinda the right range
+    tmpnum -= base + (uint32_t)(insn-bufstart);
+    
+    stepInsn(tmpnum); //jump pk11_blob_addr
+    
+    //we have 0x20 bytes of *something* here, let's just skip them?
+    stepInsn(0x20);
+    printf("pk11 header at         0x%08x\n",(int32_t)(insn-bufstart + base));
+    res = insn;
+    
+error:
+    if (err) {
+        return (void*)(uint64_t)err;
+    }
+    return res;
+}
+
 #pragma mark list
+int package1List(const char *buf, size_t bufSize, uint32_t base){
+    int err = 0;
+    Package1Header_t *pkg1 = NULL;
+    PK11Header_t *pk11hdr = NULL;
+    size_t pk11BufSize = 0;
+    
+    assure(bufSize > sizeof(Package1Header_t));
+    pkg1 = (Package1Header_t*)buf;
+    
+#warning TODO: make this actually check/parse header
+    for (int i=0; i<sizeof(pkg1->versionID); i++) {
+        assure(pkg1->versionID[i]>='0' && pkg1->versionID[i] <= '9');
+    }
+    
+    printf("\n----Package1----\n");
+    pk11hdr = getPK11Header(buf, bufSize, base);
+    pk11BufSize = bufSize-((char*)pk11hdr-buf);
+    
+    assure(pk11BufSize >= sizeof(PK11Header_t));
+    printf("\n------PK11------\n");
+    printf("Magic      : %.4s\n",(char*)&pk11hdr->magic);
+    retassure(pk11hdr->magic == *(uint32_t*)"PK11","wrong header magic. Is this file encrypted?");
+
+    printf("[Section 0]\n");
+    printf("Offset : 0x%08x\n",pk11hdr->section0Offset);
+    printf("Size   : 0x%08x\n",pk11hdr->section0Size);
+    
+    printf("[Section 1]\n");
+    printf("Offset : 0x%08x\n",pk11hdr->section1Offset);
+    printf("Size   : 0x%08x\n",pk11hdr->section1Size);
+    
+    printf("[Section 2]\n");
+    printf("Offset : 0x%08x\n",pk11hdr->section2Offset);
+    printf("Size   : 0x%08x\n",pk11hdr->section2Size);
+
+    
+error:
+    return err;
+}
+
 int package2List(const char *buf, size_t bufSize){
     int err = 0;
     Package2_t *pkg2 = NULL;

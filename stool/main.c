@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include <getopt.h>
 #include <stdint.h>
+#include <string.h>
 #include "all_stool.h"
 #include "stool.h"
 
@@ -46,6 +47,47 @@ error:
     return err;
 }
 
+int64_t parseNumber(const char *number){
+    const char *numberBK = number;
+    int isHex = 0;
+    int64_t ret = 0;
+    
+    //in case hex number only contains digits, specify with 0x1235
+    if (strncmp(number, "0x", 2) == 0){
+        isHex = 1;
+        numberBK = number+2;
+    }
+    
+    while (*number && !isHex) {
+        char c = *(number++);
+        if (c >= '0' && c<='9') {
+            ret *=10;
+            ret += c - '0';
+        }else{
+            isHex = 1;
+            ret = 0;
+        }
+    }
+    
+    if (isHex) {
+        while (*numberBK) {
+            char c = *(numberBK++);
+            ret *=16;
+            if (c >= '0' && c<='9') {
+                ret += c - '0';
+            }else if (c >= 'a' && c <= 'f'){
+                ret += 10 + c - 'a';
+            }else if (c >= 'A' && c <= 'F'){
+                ret += 10 + c - 'A';
+            }else{
+                return 0; //ERROR parsing failed
+            }
+        }
+    }
+    
+    return ret;
+}
+
 static struct option longopts[] = {
     { "help",           no_argument,        NULL, 'h' },
     { "list",           no_argument,        NULL, 'l' },
@@ -53,6 +95,7 @@ static struct option longopts[] = {
     { "package2",       no_argument,        NULL, '2' },
     { "bct",            no_argument,        NULL, '0' },
     { "section",        required_argument,  NULL, 's' },
+    { "base",           required_argument,  NULL, 'b' },
     { "extract",        required_argument,  NULL, 'e' },
     { NULL, 0, NULL, 0 }
 };
@@ -63,9 +106,10 @@ void cmd_help(){
     
     printf("  -h, --help\t\t\tprints usage information\n");
     printf("  -l, --list\t\t\tlist sections (needs type)\n");
-    printf("  -1, --package1\t\tmark file as PACKAGE1 file\n");
+    printf("  -1, --package1\t\tmark file as PACKAGE1 file (needs --base for list)\n");
     printf("  -2, --package2\t\tmark file as PACKAGE2 file\n");
-    printf("      --bct\t\tmark file as BCT file\n");
+    printf("  -b, --base\t\t\tspecify base address\n");
+    printf("      --bct \t\t\tmark file as BCT file\n");
     printf("  -s, --section SECTION\t\tselect section\n");
     printf("  -e, --extract DSTPATH\t\textract to file\n");
 
@@ -96,8 +140,10 @@ int main(int argc, const char * argv[]) {
     
     size_t fileBufSize = 0;
     char *fileBuf = NULL;
+
+    uint32_t baseAddr = 0;
     
-    while ((opt = getopt_long(argc, (char* const *)argv, "hl12s:e:0", longopts, &optindex)) > 0) {
+    while ((opt = getopt_long(argc, (char* const *)argv, "hl12s:e:0b:", longopts, &optindex)) > 0) {
         switch (opt) {
             case 'l':
                 flags |= FLAG_LIST_SECTIONS;
@@ -113,6 +159,13 @@ int main(int argc, const char * argv[]) {
                 break;
             case 'e':
                 extractFileName = optarg;
+                break;
+            case 'b':
+            {
+                uint64_t num = parseNumber(optarg);
+                assure(num && num < (1UL <<32));
+                baseAddr = (uint32_t)num;
+            }
                 break;
             
             case '0':
@@ -154,6 +207,10 @@ int main(int argc, const char * argv[]) {
     
     if (flags & FLAG_LIST_SECTIONS) {
         switch (fileType) {
+            case kFileTypePackage1:
+                retassure(baseAddr, "base address required for listing package1List");
+                assure(!package1List(fileBuf,fileBufSize, baseAddr));
+                break;
             case kFileTypePackage2:
                 assure(!package2List(fileBuf,fileBufSize));
                 break;

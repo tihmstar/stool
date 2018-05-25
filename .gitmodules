@@ -1,0 +1,3 @@
+[submodule "external/offsetfinder"]
+	path = external/offsetfinder
+	url = https://github.com/tihmstar/offsetfinder
