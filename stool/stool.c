@@ -15,9 +15,9 @@
 #define ATTRIBUTE_PACKED __attribute__ ((packed))
 
 #define unusualPrintField(field,expected,print) if (field != expected) {printf("[Unusual] %s : 0x%08x\n",print,field);}
-#define unusualPrintBuf(field,expected,print) if (memcmp(field,expected,sizeof(expected)-1)) {printf("[Unusual] %s : ",print); printHex(field,sizeof(expected)-1);printf("\n");}
+#define unusualPrintBuf(field,expected,print) if (memcmp(field,expected,sizeof(expected)-1)) {printf("[Unusual] %s : ",print); printHex(field,sizeof(expected)-1);}
 #define unusualEmptyPrintBuf(field,emptySize,print)\
-do { for (int i=0; i<emptySize; i++){ if (field[i]){printf("[Unusual] %s : ",print); printHex(field,emptySize);printf("\n");break;} }} while (0)
+do { for (int i=0; i<emptySize; i++){ if (field[i]){printf("[Unusual] %s : ",print); printHex(field,emptySize);break;} }} while (0)
 
 typedef struct{
     char unknown[0x10]; //TODO what are these headers?
@@ -135,13 +135,14 @@ int isBufEmpty(const void *buf, size_t size){
 }
 
 void printHex(const char *str, size_t size){
-#define width 0x28
+#define width (0x28)
     if (isBufEmpty(str, size)) {
-        printf("(empty[0x%02zx])",size);
+        printf("(empty[0x%02zx])\n",size);
     }else{
         int isMultiline = 0;
         int64_t printSize = 0;
-        for (int i=0; (printSize= (size-(i+width)))>0; i+=width) {
+        for (int i=0; width*i<size; i+=width) {
+            printSize = size - width*i;
             if (printSize>width){
                 if (!isMultiline) {
                     printf("\n");
@@ -317,26 +318,26 @@ int package2List(const char *buf, size_t bufSize){
     printf("[Section 0]\n");
     printf("Offset : 0x%08x\n",pkg2->header.section0Offset);
     printf("Size   : 0x%08x\n",pkg2->header.section0Size);
-    printf("CTR    : ");printHex(pkg2->header.section0CTR,0x10);printf("\n");
-    printf("SHA256 : ");printHex(pkg2->header.section0encSHA256,0x20);printf("\n");
+    printf("CTR    : ");printHex(pkg2->header.section0CTR,0x10);
+    printf("SHA256 : ");printHex(pkg2->header.section0encSHA256,0x20);
 
     printf("[Section 1]\n");
     printf("Offset : 0x%08x\n",pkg2->header.section1Offset);
     printf("Size   : 0x%08x\n",pkg2->header.section1Size);
-    printf("CTR    : ");printHex(pkg2->header.section1CTR,0x10);printf("\n");
-    printf("SHA256 : ");printHex(pkg2->header.section1encSHA256,0x20);printf("\n");
+    printf("CTR    : ");printHex(pkg2->header.section1CTR,0x10);
+    printf("SHA256 : ");printHex(pkg2->header.section1encSHA256,0x20);
 
     printf("[Section 2]\n");
     printf("Offset : 0x%08x\n",pkg2->header.section2Offset);
     printf("Size   : 0x%08x\n",pkg2->header.section2Size);
-    printf("CTR    : ");printHex(pkg2->header.section2CTR,0x10);printf("\n");
-    printf("SHA256 : ");printHex(pkg2->header.section2encSHA256,0x20);printf("\n");
+    printf("CTR    : ");printHex(pkg2->header.section2CTR,0x10);
+    printf("SHA256 : ");printHex(pkg2->header.section2encSHA256,0x20);
 
     printf("[Section 3]\n");
     printf("Offset : 0x%08x\n",pkg2->header.section3Offset);
     printf("Size   : 0x%08x\n",pkg2->header.section3Size);
-    printf("CTR    : ");printHex(pkg2->header.section3CTR,0x10);printf("\n");
-    printf("SHA256 : ");printHex(pkg2->header.section3encSHA256,0x20);printf("\n");
+    printf("CTR    : ");printHex(pkg2->header.section3CTR,0x10);
+    printf("SHA256 : ");printHex(pkg2->header.section3encSHA256,0x20);
 
     printf("\n");
     
@@ -354,8 +355,8 @@ int printBootloader_info(bootloader_info_t *bldr){
     printf("load_addr       : 0x%08x\n",bldr->load_addr);
     printf("entry_point     : 0x%08x\n",bldr->entry_point);
     printf("attribute       : 0x%08x\n",bldr->attribute);
-    printf("bootloader_hash : ");printHex(bldr->signature.hash, sizeof(bldr->signature.hash));printf("\n");
-    printf("bootloader_rsa_pss_signature: ");printHex(bldr->signature.rsa_pss_signature, sizeof(bldr->signature.rsa_pss_signature));printf("\n");
+    printf("bootloader_hash : ");printHex(bldr->signature.hash, sizeof(bldr->signature.hash));
+    printf("bootloader_rsa_pss_signature: ");printHex(bldr->signature.rsa_pss_signature, sizeof(bldr->signature.rsa_pss_signature));
 
 error:
     return err;
