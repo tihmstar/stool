@@ -159,7 +159,7 @@ void printHex(const char *str, size_t size){
     }
 }
 
-void *getPK11Header(const char *buf, ssize_t bufSize, uint32_t base){
+void *getPK11Header(const char *buf, ssize_t bufSize, uint32_t base, int printInfo){
 #define stepInsn(bytes) ({assure((bufSize-=bytes) > 0); insn+=bytes;})
     int err = 0;
     void *res = NULL;
@@ -175,11 +175,13 @@ void *getPK11Header(const char *buf, ssize_t bufSize, uint32_t base){
     
     assure(tmpnum >> 16 == base >> 16); //check if it's kinda the right range
     assure(tmpnum-base < bufSize); //check if we're pointing inside our buffer
-    printf("func base              0x%08x\n",base);
+    if (printInfo)
+        printf("func base              0x%08x\n",base);
 
     assure(tmpnum & 1); //make sure the code switches to Thumb mode
     tmpnum &= ~1; //don't get misaligned by ARM->Thumb switch
-    printf("func main              0x%08x\n",tmpnum);
+    if (printInfo)
+        printf("func main              0x%08x\n",tmpnum);
 
     tmpnum -=base; //main offset
     stepInsn(tmpnum);
@@ -227,7 +229,8 @@ void *getPK11Header(const char *buf, ssize_t bufSize, uint32_t base){
     
     //we have 0x20 bytes of *something* here, let's just skip them?
     stepInsn(0x20);
-    printf("pk11 header at         0x%08x\n",(int32_t)(insn-bufstart + base));
+    if (printInfo)
+        printf("pk11 header at         0x%08x\n",(int32_t)(insn-bufstart + base));
     res = insn;
     
 error:
@@ -243,7 +246,10 @@ int package1List(const char *buf, size_t bufSize, uint32_t base){
     Package1Header_t *pkg1 = NULL;
     PK11Header_t *pk11hdr = NULL;
     size_t pk11BufSize = 0;
-    
+    const char *secion0Addr = NULL;
+    const char *secion1Addr = NULL;
+    const char *secion2Addr = NULL;
+
     assure(bufSize > sizeof(Package1Header_t));
     pkg1 = (Package1Header_t*)buf;
     
@@ -253,7 +259,7 @@ int package1List(const char *buf, size_t bufSize, uint32_t base){
     }
     
     printf("\n----Package1----\n");
-    pk11hdr = getPK11Header(buf, bufSize, base);
+    pk11hdr = getPK11Header(buf, bufSize, base, 1);
     pk11BufSize = bufSize-((char*)pk11hdr-buf);
     
     assure(pk11BufSize >= sizeof(PK11Header_t));
@@ -264,15 +270,30 @@ int package1List(const char *buf, size_t bufSize, uint32_t base){
     printf("[Section 0]\n");
     printf("Offset : 0x%08x\n",pk11hdr->section0Offset);
     printf("Size   : 0x%08x\n",pk11hdr->section0Size);
+    if (!package1GetSection(buf, bufSize, base, 0, &secion0Addr, NULL)) {
+        printf("Address: 0x%08x\n",(uint32_t)(secion0Addr-buf+base));
+    }else{
+        error("failed to extract section data!");
+    }
     
     printf("[Section 1]\n");
     printf("Offset : 0x%08x\n",pk11hdr->section1Offset);
     printf("Size   : 0x%08x\n",pk11hdr->section1Size);
+    if (!package1GetSection(buf, bufSize, base, 1, &secion0Addr, NULL)) {
+        printf("Address: 0x%08x\n",(uint32_t)(secion0Addr-buf+base));
+    }else{
+        error("failed to extract section data!");
+    }
     
     printf("[Section 2]\n");
     printf("Offset : 0x%08x\n",pk11hdr->section2Offset);
     printf("Size   : 0x%08x\n",pk11hdr->section2Size);
-
+    if (!package1GetSection(buf, bufSize, base, 2, &secion0Addr, NULL)) {
+        printf("Address: 0x%08x\n",(uint32_t)(secion0Addr-buf+base));
+    }else{
+        error("failed to extract section data!");
+    }
+    
     
 error:
     return err;
@@ -406,25 +427,27 @@ int package1GetSection(const char *buf, size_t bufSize, uint32_t base, int selec
         assure(pkg1->versionID[i]>='0' && pkg1->versionID[i] <= '9');
     }
     
-    pk11hdr = getPK11Header(buf, bufSize, base);
+    pk11hdr = getPK11Header(buf, bufSize, base, 0);
     pk11BufSize = bufSize-((char*)pk11hdr-buf);
     
     assure(pk11BufSize >= sizeof(PK11Header_t));
     retassure(pk11hdr->magic == *(uint32_t*)"PK11","wrong header magic. Is this file encrypted?");
 
     outPtr  = (pk11hdr+1);
-    outSize = pk11hdr->section0Size;
     switch (selectedSection) {
         case 2:
             outPtr  += pk11hdr->section1Size;
-            outSize += pk11hdr->section2Size;
+            if (!outSize)
+                outSize = pk11hdr->section2Size;
             //intentionally no break
         case 1:
             outPtr  += pk11hdr->section0Size;
-            outSize += pk11hdr->section1Size;
+            if (!outSize)
+                outSize = pk11hdr->section1Size;
             //intentionally no break
         case 0:
-            //parameters for extracting section 0 already set correctly
+            if (!outSize)
+                outSize = pk11hdr->section0Size;
             break;
         default:
             reterror("Unknown section %d",selectedSection);
@@ -433,7 +456,8 @@ int package1GetSection(const char *buf, size_t bufSize, uint32_t base, int selec
     //check bufsize before commiting results
     assure((char*)outPtr-buf+outSize <= bufSize);
     *section = outPtr;
-    *sectionSize = outSize;
+    if (sectionSize)
+        *sectionSize = outSize;
     
 error:
     return err;
@@ -441,6 +465,8 @@ error:
 
 int package2GetSection(const char *buf, size_t bufSize, int selectedSection, const char **section, size_t *sectionSize){
     int err = 0;
+    void *outPtr = NULL;
+    size_t outSize = 0;
     
     Package2_t *pkg2 = NULL;
     
@@ -448,28 +474,38 @@ int package2GetSection(const char *buf, size_t bufSize, int selectedSection, con
     pkg2 = (Package2_t*)buf;
     assure(*(uint32_t*)pkg2->header.magic == *(uint32_t*)"PK21");
     
+    outPtr  = pkg2->body;
     switch (selectedSection) {
-        case 0:
-            *section = pkg2->body;
-            *sectionSize = pkg2->header.section0Size;
-            break;
-        case 1:
-            *section = pkg2->body+pkg2->header.section0Size;
-            *sectionSize = pkg2->header.section1Size;
-            break;
-        case 2:
-            *section = pkg2->body+pkg2->header.section0Size + pkg2->header.section1Size;
-            *sectionSize = pkg2->header.section2Size;
-            break;
         case 3:
-            *section = pkg2->body+pkg2->header.section0Size + pkg2->header.section1Size + pkg2->header.section2Size;
-            *sectionSize = pkg2->header.section3Size;
+            outPtr += pkg2->header.section2Size;
+            if (!outSize)
+                outSize = pkg2->header.section3Size;
+            //intentionally no break
+        case 2:
+            outPtr += pkg2->header.section1Size;
+            if (!outSize)
+                outSize = pkg2->header.section2Size;
+            //intentionally no break
+        case 1:
+            outPtr += pkg2->header.section0Size;
+            if (!outSize)
+                outSize = pkg2->header.section1Size;
+            //intentionally no break
+        case 0:
+            outPtr = pkg2->body;
+            if (!outSize)
+                outSize = pkg2->header.section0Size;
             break;
-
         default:
             reterror("Unknown section %d",selectedSection);
             break;
     }
+    //check bufsize before commiting results
+    assure((char*)outPtr-buf+outSize <= bufSize);
+    *section = outPtr;
+    if (sectionSize)
+        *sectionSize = outSize;
+    
     
 error:
     return err;
