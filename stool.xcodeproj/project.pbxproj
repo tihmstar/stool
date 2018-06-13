@@ -30,6 +30,7 @@
 		872BF2F620AFD3D600E0B540 /* stool.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = stool.h; sourceTree = "<group>"; };
 		872BF2F720AFD3D700E0B540 /* stool.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = stool.c; sourceTree = "<group>"; };
 		872BF2F920AFD40100E0B540 /* all_stool.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = all_stool.h; sourceTree = "<group>"; };
+		877A484E20D0CA8700AEFC5F /* structures.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = structures.h; sourceTree = "<group>"; };
 		87F1135B20B3D34F004E1071 /* patchfinder32.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = patchfinder32.c; path = external/offsetfinder/offsetfinder/patchfinder32/patchfinder32.c; sourceTree = SOURCE_ROOT; };
 		87F1135C20B3D34F004E1071 /* patchfinder32.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = patchfinder32.h; path = external/offsetfinder/offsetfinder/patchfinder32/patchfinder32.h; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
@@ -66,6 +67,7 @@
 			children = (
 				87F1135820B3D312004E1071 /* external */,
 				872BF2F920AFD40100E0B540 /* all_stool.h */,
+				877A484E20D0CA8700AEFC5F /* structures.h */,
 				872BF2F620AFD3D600E0B540 /* stool.h */,
 				872BF2F720AFD3D700E0B540 /* stool.c */,
 				872BF2EF20AFD31900E0B540 /* main.c */,

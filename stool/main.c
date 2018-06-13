@@ -94,6 +94,7 @@ static struct option longopts[] = {
     { "package1",       no_argument,        NULL, '1' },
     { "package2",       no_argument,        NULL, '2' },
     { "bct",            no_argument,        NULL, '0' },
+    { "nro",            no_argument,        NULL, 'n' },
     { "section",        required_argument,  NULL, 's' },
     { "base",           required_argument,  NULL, 'b' },
     { "extract",        required_argument,  NULL, 'e' },
@@ -110,6 +111,7 @@ void cmd_help(){
     printf("  -2, --package2\t\tmark file as PACKAGE2 file\n");
     printf("  -b, --base\t\t\tspecify base address\n");
     printf("      --bct \t\t\tmark file as BCT file\n");
+    printf("  -n, --nro \t\t\tmark file as NRO file\n");
     printf("  -s, --section SECTION\t\tselect section\n");
     printf("  -e, --extract DSTPATH\t\textract to file\n");
 
@@ -120,7 +122,8 @@ enum filetype{
     kFileTypeUndefined  = 0,
     kFileTypePackage1   = 1,
     kFileTypePackage2   = 2,
-    kFileTypeBCT
+    kFileTypeBCT,
+    kFileTypeNRO
 };
 
 #define FLAG_LIST_SECTIONS    1 << 0
@@ -143,7 +146,7 @@ int main(int argc, const char * argv[]) {
 
     uint32_t baseAddr = 0;
     
-    while ((opt = getopt_long(argc, (char* const *)argv, "hl12s:e:0b:", longopts, &optindex)) > 0) {
+    while ((opt = getopt_long(argc, (char* const *)argv, "hl12s:e:0b:n", longopts, &optindex)) > 0) {
         switch (opt) {
             case 'l':
                 flags |= FLAG_LIST_SECTIONS;
@@ -153,6 +156,10 @@ int main(int argc, const char * argv[]) {
             case '2':
                 assure(fileType == kFileTypeUndefined);
                 fileType = opt-'0';
+                break;
+            case 'n':
+                assure(fileType == kFileTypeUndefined);
+                fileType = kFileTypeNRO;
                 break;
             case 's':
                 section = atoi(optarg);
@@ -217,6 +224,9 @@ int main(int argc, const char * argv[]) {
                 
             case kFileTypeBCT:
                 assure(!bctList(fileBuf,fileBufSize));
+                break;
+            case kFileTypeNRO:
+                assure(!nroList(fileBuf,fileBufSize));
                 break;
                 
             default:

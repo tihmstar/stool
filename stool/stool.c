@@ -10,121 +10,14 @@
 #include "stool.h"
 #include <string.h>
 #include "patchfinder32.h"
-
-#define STATIC_INLINE static inline
-#define ATTRIBUTE_PACKED __attribute__ ((packed))
+#include "structures.h"
 
 #define unusualPrintField(field,expected,print) if (field != expected) {printf("[Unusual] %s : 0x%08x\n",print,field);}
 #define unusualPrintBuf(field,expected,print) if (memcmp(field,expected,sizeof(expected)-1)) {printf("[Unusual] %s : ",print); printHex(field,sizeof(expected)-1);}
 #define unusualEmptyPrintBuf(field,emptySize,print)\
 do { for (int i=0; i<emptySize; i++){ if (field[i]){printf("[Unusual] %s : ",print); printHex(field,emptySize);break;} }} while (0)
-
-typedef struct{
-    char unknown[0x10]; //TODO what are these headers?
-    char versionID[14];
-    uint16_t unknown2;
-} ATTRIBUTE_PACKED Package1Header_t;
-
-
-typedef struct{
-    uint32_t magic;
-    uint32_t section0Size;
-    uint32_t section0Offset;
-    uint32_t _unknown;
-    uint32_t section1Size;
-    uint32_t section1Offset;
-    uint32_t section2Size;
-    uint32_t section2Offset;
-} ATTRIBUTE_PACKED PK11Header_t;
-
-
-typedef struct{
-    char headerCTR[0x10];
-    char section0CTR[0x10];
-    char section1CTR[0x10];
-    char section2CTR[0x10];
-    char section3CTR[0x10];
-    char magic[4];
-    uint32_t baseOffset;
-    uint32_t _zerobytes;
-    uint16_t version;
-    uint16_t __padding;
-    uint32_t section0Size;
-    uint32_t section1Size;
-    uint32_t section2Size;
-    uint32_t section3Size;
-    uint32_t section0Offset;
-    uint32_t section1Offset;
-    uint32_t section2Offset;
-    uint32_t section3Offset;
-    char section0encSHA256[0x20];
-    char section1encSHA256[0x20];
-    char section2encSHA256[0x20];
-    char section3encSHA256[0x20];
-} ATTRIBUTE_PACKED Package2Header_t;
-CASSERT(sizeof(Package2Header_t) == 0x100, Package2Header_t_bad_header_size);
-
-typedef struct{
-    char signature[0x100];
-    Package2Header_t header;
-    char body[];
-} ATTRIBUTE_PACKED Package2_t;
-
-typedef struct{
-    char hash[0x10];
-    char rsa_pss_signature[0x100];
-} ATTRIBUTE_PACKED obj_signature_t;
-
-typedef struct{
-    char __padding_pre[0x0c];
-    char keyblob[0xb0];
-    char __padding_post[0x08];
-} ATTRIBUTE_PACKED switch_customer_data_t;
-
-typedef struct{
-    uint32_t version;
-    uint32_t start_block;
-    uint32_t start_page;
-    uint32_t length;
-    uint32_t load_addr;
-    uint32_t entry_point;
-    uint32_t attribute;
-    obj_signature_t signature;
-} ATTRIBUTE_PACKED bootloader_info_t;
-
-typedef struct{
-    char bad_block_table[0x210];
-    char bct_key[0x100];
-    obj_signature_t bct_signature;
-    uint32_t sec_provisioning_key_num_insecure; //always zero
-    char sec_provisioning_key[0x20]; //always empty
-    switch_customer_data_t customer_data;
-    uint32_t odm_data;  //unused
-    uint32_t reserved0; //unused
-    char random_aes_block[0x10]; //Always empty
-    char unique_chip_id[0x10]; //Always empty
-    uint32_t boot_data_version; //Set to 0x00210001 (BOOTDATA_VERSION_T210).
-    uint32_t block_size_log2; //Always 0x0E.
-    uint32_t page_size_log2; //Always 0x09.
-    uint32_t partition_size; //Always 0x01000000.
-    uint32_t num_param_sets; //Always 0x01.
-    uint32_t dev_type;      //Set to 0x04 (dev_type_sdmmc).
-    char dev_params[0x40];
-    uint32_t num_sdram_sets; //always set to 0x0
-    char sdram_params0[0x768];
-    char sdram_params1[0x768];
-    char sdram_params2[0x768];
-    char sdram_params3[0x768];
-    uint32_t num_bootloaders; //always 2
-    bootloader_info_t bootloader_info[4]; //3 and 4 are empty
-    uint8_t enable_fail_back; //always 0
-    uint32_t secure_debug_control; //always 0
-    uint32_t sec_provisioning_key_num_secure; //always 0
-    char reserved2[0x12];
-    //0x05 padding
-} ATTRIBUTE_PACKED BCT_t;
-CASSERT(sizeof(BCT_t) == 0x27FB, BCT_t_bad_header_size);
-
+#define stepInsn(bytes) ({assure((bufSize-=bytes) > 0); insn+=bytes;})
+#define step(buf,bytes) ({assure((bufSize-=bytes) > 0); buf+=bytes;})
 
 int isBufEmpty(const void *buf, size_t size){
     while (size--) {
@@ -161,7 +54,6 @@ void printHex(const char *str, size_t size){
 }
 
 void *getPK11Header(const char *buf, ssize_t bufSize, uint32_t base, int printInfo){
-#define stepInsn(bytes) ({assure((bufSize-=bytes) > 0); insn+=bytes;})
     int err = 0;
     void *res = NULL;
     uint8_t *bufstart = (uint8_t*)buf;
@@ -411,6 +303,57 @@ error:
     return err;
 }
 
+int nroList(const char *buf, size_t bufSize){
+    int err = 0;
+    nroStart_t *nroStrt = NULL;
+    nroHeader_t *nroHead= NULL;
+    
+    assure(bufSize >= sizeof(nroStart_t));
+    nroStrt = (nroStart_t*)buf;
+    
+    printf("\n----NRO Start----\n");
+    printf("unused      : ");printHex(nroStrt->unused,4);
+    printf("MOD0 offsef : 0x%08x\n",nroStrt->mod0_offset);
+    if (strcmp(nroStrt->padding,"HOMEBREW")) {
+        printf("HOMEBREW file detected!\n");
+    }
+    step(buf,sizeof(nroStart_t));
+    nroHead = (nroHeader_t*)buf;
+    assure(bufSize >= sizeof(nroHeader_t));
+    
+    printf("\n------NRO0------\n");
+    printf("Magic       : %.4s\n",(char*)&nroHead->magic);
+    retassure(nroHead->magic == *(uint32_t*)"NRO0" ,"wrong NRO header magic");
+    unusualPrintField(nroHead->formatVersion, 0, "formatVersion");
+    printf("Size        : 0x%08x\n",nroHead->size);
+    printf("Flags       : 0x%08x\n",nroHead->flags);
+    printf("Bss size    : 0x%08x\n",nroHead->bssSize);
+    printf("build_id    : ");printHex(nroHead->buildID,sizeof(nroHead->buildID));
+    printf("[.text]\n");
+    printf("Offset      : 0x%08x\n",nroHead->text.fileOffset);
+    printf("Size        : 0x%08x\n",nroHead->text.size);
+    printf("[.ro]\n");
+    printf("Offset      : 0x%08x\n",nroHead->ro.fileOffset);
+    printf("Size        : 0x%08x\n",nroHead->ro.size);
+    printf("[.data]\n");
+    printf("Offset      : 0x%08x\n",nroHead->data.fileOffset);
+    printf("Size        : 0x%08x\n",nroHead->data.size);
+    printf("[.apiInfo]\n");
+    printf("Offset      : 0x%08x\n",nroHead->apiInfo.fileOffset);
+    printf("Size        : 0x%08x\n",nroHead->apiInfo.size);
+    printf("[.dynstr]\n");
+    printf("Offset      : 0x%08x\n",nroHead->dynstr.fileOffset);
+    printf("Size        : 0x%08x\n",nroHead->dynstr.size);
+    printf("[.dynsym]\n");
+    printf("Offset      : 0x%08x\n",nroHead->dynsym.fileOffset);
+    printf("Size        : 0x%08x\n",nroHead->dynsym.size);
+    
+    
+error:
+    return err;
+}
+
+
 #pragma mark extract
 int package1GetSection(const char *buf, size_t bufSize, uint32_t base, int selectedSection, const char **section, size_t *sectionSize){
     int err = 0;
@@ -493,7 +436,6 @@ int package2GetSection(const char *buf, size_t bufSize, int selectedSection, con
                 outSize = pkg2->header.section1Size;
             //intentionally no break
         case 0:
-            outPtr = pkg2->body;
             if (!outSize)
                 outSize = pkg2->header.section0Size;
             break;
